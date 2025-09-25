@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>躲避方塊 Dodge Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            position: relative;
+            border: 3px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+            background: #f0f0f0;
+        }
+
+        #gameCanvas {
+            display: block;
+            background: #f0f0f0;
+            border-radius: 7px;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .score {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.8);
+            pointer-events: none;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            display: none;
+            pointer-events: auto;
+        }
+
+        .game-over h2 {
+            font-size: 32px;
+            margin-bottom: 15px;
+            color: #ff6b6b;
+        }
+
+        .game-over p {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .start-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            pointer-events: auto;
+        }
+
+        .start-screen h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #4ecdc4;
+        }
+
+        .start-screen p {
+            font-size: 16px;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .audio-control {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            pointer-events: auto;
+        }
+
+        .audio-btn {
+            background: rgba(0, 0, 0, 0.6);
+            border: none;
+            color: white;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .audio-btn:hover {
+            background: rgba(0, 0, 0, 0.8);
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div class="ui-overlay">
+            <div class="score" id="score">分數: 0</div>
+            
+            <div class="start-screen" id="startScreen">
+                <h1>🎮 躲避方塊</h1>
+                <p>使用 ← → 方向鍵控制藍色方塊<br>
+                   避開掉落的紅色障礙物<br>
+                   每存活1秒得1分！</p>
+                   <button id="startButton" class="btn">開始遊戲</button>
+            </div>
+            
+            <div class="game-over" id="gameOverScreen">
+                <h2>💥 遊戲結束</h2>
+                <p id="finalScore">你的得分是 0</p>
+                <button class="btn" onclick="restartGame()">重新開始</button>
+            </div>
+            
+            <div class="controls">
+                使用 ← → 方向鍵移動
+            </div>
+            
+            <div class="audio-control">
+                <button id="audioToggle" class="audio-btn" onclick="toggleAudio()">🔊</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('遊戲正在載入...');
+        
+        // 遊戲變數
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreElement = document.getElementById('finalScore');
+
+        let gameState = 'start'; // 'start', 'playing', 'gameOver'
+        let score = 0;
+        let gameStartTime = 0;
+        let lastObstacleSpawn = 0;
+        let obstacleSpawnRate = 1000; // 毫秒
+        let obstacleSpeed = 2;
+        let animationId;
+        let lastDifficulty = 0; // 追蹤上次的難度等級
+
+        // 玩家物件
+        const player = {
+            x: canvas.width / 2 - 25,
+            y: canvas.height - 80,
+            width: 50,
+            height: 50,
+            speed: 7,
+            color: '#3498db'
+        };
+
+        // 障礙物陣列
+        let obstacles = [];
+
+        // 按鍵狀態
+        const keys = {
+            left: false,
+            right: false
+        };
+
+        // 音效系統
+        const audio = {
+            background: new Audio('./public/sounds/background.mp3'),
+            hit: new Audio('./public/sounds/hit.mp3'),
+            success: new Audio('./public/sounds/success.mp3'),
+            enabled: true
+        };
+
+        // 設置背景音樂循環
+        audio.background.loop = true;
+        audio.background.volume = 0.3;
+        audio.hit.volume = 0.7;
+        audio.success.volume = 0.5;
+
+        // 音效播放函數
+        function playSound(soundName) {
+            if (audio.enabled && audio[soundName]) {
+                audio[soundName].currentTime = 0;
+                audio[soundName].play().catch(e => console.log('音效播放失敗:', e));
+            }
+        }
+
+        // 停止背景音樂
+        function stopBackgroundMusic() {
+            audio.background.pause();
+            audio.background.currentTime = 0;
+        }
+
+        // 切換音效開關
+        function toggleAudio() {
+            audio.enabled = !audio.enabled;
+            const toggleBtn = document.getElementById('audioToggle');
+            
+            if (audio.enabled) {
+                toggleBtn.textContent = '🔊';
+                if (gameState === 'playing') {
+                    playSound('background');
+                }
+            } else {
+                toggleBtn.textContent = '🔇';
+                stopBackgroundMusic();
+            }
+        }
+
+        // 事件監聽器
+        document.addEventListener('keydown', (e) => {
+            if (gameState !== 'playing') return;
+            
+            console.log('按鍵按下:', e.code);
+            
+            switch(e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    keys.left = true;
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    keys.right = true;
+                    e.preventDefault();
+                    break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    keys.left = false;
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    keys.right = false;
+                    e.preventDefault();
+                    break;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const startButton = document.getElementById('startButton');
+            startButton.addEventListener('click', () => {
+                startGame();
+                playSound('background');
+            });
+        });
+
+        // 開始遊戲
+        function startGame() {
+            console.log('開始遊戲');
+            gameState = 'playing';
+            score = 0;
+            gameStartTime = Date.now();
+            lastObstacleSpawn = 0;
+            obstacleSpawnRate = 1000;
+            obstacleSpeed = 2;
+            obstacles = [];
+            lastDifficulty = 0; // 重置難度追蹤
+            
+            // 重置玩家位置
+            player.x = canvas.width / 2 - 25;
+            
+            // 隱藏開始畫面
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            
+            // 開始遊戲循環
+            gameLoop();
+        }
+
+        // 重新開始遊戲
+        function restartGame() {
+            console.log('重新開始遊戲');
+            startGame();
+        }
+
+        // 結束遊戲
+        function endGame() {
+            console.log('遊戲結束，得分:', score);
+            gameState = 'gameOver';
+            cancelAnimationFrame(animationId);
+            
+            // 停止背景音樂並播放撞擊音效
+            stopBackgroundMusic();
+            playSound('hit');
+            
+            // 顯示遊戲結束畫面
+            finalScoreElement.textContent = `你的得分是 ${score}`;
+            gameOverScreen.style.display = 'block';
+        }
+
+        // 更新分數
+        function updateScore() {
+            if (gameState === 'playing') {
+                const newScore = Math.floor((Date.now() - gameStartTime) / 1000);
+                
+                // 檢查是否達到里程碑（每10分播放成功音效）
+                if (newScore > score && newScore % 10 === 0 && newScore > 0) {
+                    playSound('success');
+                }
+                
+                score = newScore;
+                scoreElement.textContent = `分數: ${score}`;
+                
+                // 強化難度遞增系統
+                const difficulty = Math.floor(score / 8); // 每8秒增加一級難度
+                obstacleSpeed = 2 + difficulty * 0.8; // 更快的速度增長
+                obstacleSpawnRate = Math.max(200, 1000 - difficulty * 80); // 更頻繁的生成，最快200ms
+                
+                // 檢查是否有新的難度等級
+                if (difficulty > lastDifficulty) {
+                    lastDifficulty = difficulty;
+                    console.log(`難度提升至等級 ${difficulty}！`);
+                    if (difficulty > 0) {
+                        // 閃爍效果提示難度提升
+                        scoreElement.style.color = '#ff6b6b';
+                        setTimeout(() => {
+                            scoreElement.style.color = '#333';
+                        }, 1000);
+                    }
+                }
+                
+                // 顯示難度等級
+                if (difficulty > 0) {
+                    scoreElement.textContent = `分數: ${score} | 難度: ${difficulty}`;
+                } else {
+                    scoreElement.textContent = `分數: ${score}`;
+                }
+            }
+        }
+
+        // 更新玩家位置
+        function updatePlayer() {
+            if (keys.left && player.x > 0) {
+                player.x -= player.speed;
+            }
+            if (keys.right && player.x < canvas.width - player.width) {
+                player.x += player.speed;
+            }
+        }
+
+        // 生成障礙物
+        function spawnObstacle() {
+            const now = Date.now();
+            if (now - lastObstacleSpawn > obstacleSpawnRate) {
+                const difficulty = Math.floor(score / 8);
+                
+                // 基本障礙物
+                obstacles.push({
+                    x: Math.random() * (canvas.width - 40),
+                    y: -40,
+                    width: 40,
+                    height: 40,
+                    speed: obstacleSpeed,
+                    color: '#e74c3c'
+                });
+                
+                // 高難度時生成額外障礙物
+                const extraObstacles = Math.floor(difficulty / 3); // 每3級難度增加一個額外障礙物
+                for (let i = 0; i < extraObstacles; i++) {
+                    obstacles.push({
+                        x: Math.random() * (canvas.width - 40),
+                        y: -40 - (i + 1) * 60, // 錯開高度
+                        width: 40,
+                        height: 40,
+                        speed: obstacleSpeed + Math.random() * 1, // 略微不同的速度
+                        color: '#e74c3c'
+                    });
+                }
+                
+                lastObstacleSpawn = now;
+            }
+        }
+
+        // 更新障礙物
+        function updateObstacles() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].y += obstacles[i].speed;
+                
+                // 移除超出螢幕的障礙物
+                if (obstacles[i].y > canvas.height) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        // 碰撞檢測
+        function checkCollisions() {
+            for (let obstacle of obstacles) {
+                if (player.x < obstacle.x + obstacle.width &&
+                    player.x + player.width > obstacle.x &&
+                    player.y < obstacle.y + obstacle.height &&
+                    player.y + player.height > obstacle.y) {
+                    endGame();
+                    return;
+                }
+            }
+        }
+
+        // 繪製玩家
+        function drawPlayer() {
+            // 玩家陰影
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(player.x + 3, player.y + 3, player.width, player.height);
+            
+            // 玩家主體
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // 玩家高光
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(player.x + 5, player.y + 5, player.width - 10, 10);
+        }
+
+        // 繪製障礙物
+        function drawObstacles() {
+            for (let obstacle of obstacles) {
+                // 障礙物陰影
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                ctx.fillRect(obstacle.x + 2, obstacle.y + 2, obstacle.width, obstacle.height);
+                
+                // 障礙物主體
+                ctx.fillStyle = obstacle.color;
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                
+                // 障礙物高光
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.fillRect(obstacle.x + 3, obstacle.y + 3, obstacle.width - 6, 8);
+            }
+        }
+
+        // 繪製背景
+        function drawBackground() {
+            // 清除畫布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 繪製格子背景
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            
+            for (let x = 0; x <= canvas.width; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = 0; y <= canvas.height; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        // 主遊戲循環
+        function gameLoop() {
+            if (gameState !== 'playing') return;
+            
+            // 更新遊戲狀態
+            updateScore();
+            updatePlayer();
+            spawnObstacle();
+            updateObstacles();
+            checkCollisions();
+            
+            // 繪製遊戲
+            drawBackground();
+            drawPlayer();
+            drawObstacles();
+            
+            // 繼續遊戲循環
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        // 初始化遊戲
+        function init() {
+            console.log('初始化遊戲');
+            drawBackground();
+            
+            // 在開始畫面繪製示例
+            ctx.fillStyle = player.color;
+            ctx.fillRect(canvas.width / 2 - 25, canvas.height - 80, 50, 50);
+            
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(200, 100, 40, 40);
+            ctx.fillRect(400, 150, 40, 40);
+            ctx.fillRect(600, 80, 40, 40);
+        }
+
+        // 啟動遊戲
+        window.addEventListener('load', () => {
+            console.log('視窗載入完成');
+            init();
+        });
+        
+        // DOM載入完成後初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
